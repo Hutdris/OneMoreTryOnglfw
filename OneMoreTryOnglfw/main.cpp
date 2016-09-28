@@ -1,19 +1,24 @@
+//std part
+#include <iostream>
+#include <istream>
+#include <fstream>
+#include <ostream>
+#include <ios>
+#include <vector>
+#include <string>
+#include <sstream>
 // GLM
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
-
-
-#include <iostream>
 // GLEW
 #define GLEW_STATIC
 #include <GL/glew.h>
-
 // GLFW
 #include <GLFW/glfw3.h>
 
-// Function prototypes
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+//My header
+#include "shader.h"
 
 // Window dimensions
 const GLuint WIDTH = 800, HEIGHT = 600;
@@ -29,7 +34,8 @@ const GLchar* vertexShaderSource =
 "gl_Position = trans * vec4(position.x, position.y, position.z, 1.0);\n"
 "vertexColor = vec4(0.5f, 0.0f, 0.0f, 1.0f);\n"
 "}\0";
-const GLchar* fragmentShaderSource = "#version 450 core\n"
+const GLchar* fragmentShaderSource = 
+"#version 450 core\n"
 "in vec4 vertexColor;\n"
 "out vec4 color;\n"
 "void main()\n"
@@ -37,9 +43,40 @@ const GLchar* fragmentShaderSource = "#version 450 core\n"
 "color = vertexColor;\n"
 "}\n\0";
 
+
+struct Vertex {
+	glm::vec3 Position;
+	glm::vec3 Normal;
+	glm::vec2 TexCoords;
+};
+struct Texture{
+	GLuint id;
+	std::string type;
+};
+
+class Mesh {
+public:
+	std::vector<Vertex> vertices;
+	std::vector<GLuint> indices;
+	std::vector<Texture> textures;
+	Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures);
+	void Draw(Shader shader);
+private:
+	/*  Render data  */
+	GLuint VAO, VBO, EBO;
+	/*  Functions    */
+	void setupMesh();
+};
+
+// Function prototypes
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+void stl_2_vertexs(std::vector <Vertex> &vertexs);
+
 // The MAIN function, from here we start the application and run the game loop
 int main()
 {
+	std::vector <Vertex> test;
+	stl_2_vertexs(test);
 	std::cout << "Starting GLFW context, OpenGL 4.5" << std::endl;
 	// Init GLFW
 	glfwInit();
@@ -192,4 +229,109 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 {
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
+}
+
+void stl_2_vertexs(std::vector <Vertex> &vertexs) {
+
+	std::ifstream stlFile;
+	stlFile.open("test.stl");
+	if (!stlFile) // check if file can be found
+	{
+		std::cout << "STL file not found.";
+		exit(1);
+	}
+
+
+	std::string ignore;
+	stlFile >> ignore >> ignore; //ignore header: solid t=x.xx
+	std::string endcase = ignore;
+	int index = 0;
+	int iIndex = 0;
+	int indexTmp = 0;
+
+	while (1)
+	{
+		stlFile >> ignore >> ignore; // ignore "normal"
+		if (ignore == endcase)
+			break;
+		float normal[3];
+
+		stlFile >> normal[0] >> normal[1] >> normal[2]; // read and save the face normal
+		stlFile >> ignore >> ignore; // ignore "outer loop"
+		for (int i = 0; i <= 2; ++i) // read the three vertices of a face
+		{
+			Vertex vertexTmp;
+			vertexTmp.Normal = glm::vec3(normal[0], normal[1], normal[2]);
+			vertexTmp.Normal[0] = normal[0]; vertexTmp.Normal[1] = normal[1]; vertexTmp.Normal[2] = normal[2];
+			stlFile >> ignore >> vertexTmp.Position[0] >> vertexTmp.Position[1] >> vertexTmp.Position[2];// >> ignore >> ignore;  
+			vertexs.push_back(vertexTmp);
+		}
+		stlFile >> ignore >> ignore; // endloop // endfacet
+	}
+
+	stlFile.close();
+}
+
+Mesh::Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures) {
+	this->vertices = vertices;
+	this->indices = indices;
+	this->textures = textures;
+
+	this->setupMesh();
+}
+void Mesh::Draw(Shader shader) {
+	GLuint diffuseNr = 1;
+	GLuint specularNr = 1;
+	for (GLuint i = 0; i < this->textures.size(); i++)
+	{
+		glActiveTexture(GL_TEXTURE0 + i); // Activate proper texture unit before binding
+										  // Retrieve texture number (the N in diffuse_textureN)
+		std::stringstream ss;
+		std::string number;
+		std::string name = this->textures[i].type;
+		if (name == "texture_diffuse")
+			ss << diffuseNr++; // Transfer GLuint to stream
+		else if (name == "texture_specular")
+			ss << specularNr++; // Transfer GLuint to stream
+		number = ss.str();
+
+		glUniform1f(glGetUniformLocation(shader.Program, ("material." + name + number).c_str()), i);
+		glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
+	}
+	glActiveTexture(GL_TEXTURE0);
+
+	// Draw mesh
+	glBindVertexArray(this->VAO);
+	glDrawElements(GL_TRIANGLES, this->indices.size(), GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+}
+void Mesh::setupMesh() {
+	glGenVertexArrays(1, &this->VAO);
+	glGenBuffers(1, &this->VBO);
+	glGenBuffers(1, &this->EBO);
+
+	glBindVertexArray(this->VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
+
+	glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(Vertex),
+		&this->vertices[0], GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->indices.size() * sizeof(GLuint),
+		&this->indices[0], GL_STATIC_DRAW);
+
+	// Vertex Positions
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+		(GLvoid*)0);
+	// Vertex Normals
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+		(GLvoid*)offsetof(Vertex, Normal));
+	// Vertex Texture Coords
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+		(GLvoid*)offsetof(Vertex, TexCoords));
+
+	glBindVertexArray(0);
 }
