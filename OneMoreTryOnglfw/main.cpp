@@ -103,7 +103,8 @@ int main()
 	glfwGetFramebufferSize(window, &width, &height);
 	glViewport(0, 0, width, height);
 
-
+	Shader shaderProgram = Shader::Shader("vertexShader.vs", "fragmentShader.frag");
+	/*    
 	// Build and compile our shader program
 	// Vertex shader
 	GLint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -142,7 +143,7 @@ int main()
 	}
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
-
+	*/
 
 	// Set up vertex data (and buffer(s)) and attribute pointers
 	//GLfloat vertices[] = {
@@ -167,16 +168,14 @@ int main()
 	};
 
 
-	GLuint VBO, VAO, EBO;
+	GLuint VBO, VAO;
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
 	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW); 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STREAM_DRAW);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
@@ -203,13 +202,11 @@ int main()
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw our first triangle
-		glUseProgram(shaderProgram);
-		trans = glm::rotate(trans, (GLfloat)glfwGetTime() * 100.0f, glm::vec3(0.0f, 0.0f, 1.0f));
-		GLuint transformLoc = glGetUniformLocation(shaderProgram, "trans");
-		glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+		shaderProgram.Use();
+		//glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
 		glBindVertexArray(VAO);
-		//glDrawArrays(GL_TRIANGLES, 0, 6);
-		glDrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_INT, 0);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		//glDrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 
 		// Swap the screen buffers
@@ -218,9 +215,10 @@ int main()
 	// Properly de-allocate all resources once they've outlived their purpose
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
-	glDeleteBuffers(1, &EBO);
 	// Terminate GLFW, clearing any resources allocated by GLFW.
+	std::cout << "before";
 	glfwTerminate();
+	std::cout << "after";
 	return 0;
 }
 
