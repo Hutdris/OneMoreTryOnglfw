@@ -19,64 +19,29 @@
 
 //My header
 #include "shader.h"
-
+#include "mesh.h"
+#include "camera.h"
 // Window dimensions
-const GLuint WIDTH = 800, HEIGHT = 600;
-
-// Shaders
-const GLchar* vertexShaderSource =
-"#version 450 core\n"
-"layout (location = 0) in vec3 position;\n"
-"out vec4 vertexColor;\n"
-"uniform mat4 trans;\n"
-"void main()\n"
-"{\n"
-"gl_Position = trans * vec4(position.x, position.y, position.z, 1.0);\n"
-"vertexColor = vec4(0.5f, 0.0f, 0.0f, 1.0f);\n"
-"}\0";
-const GLchar* fragmentShaderSource = 
-"#version 450 core\n"
-"in vec4 vertexColor;\n"
-"out vec4 color;\n"
-"void main()\n"
-"{\n"
-"color = vertexColor;\n"
-"}\n\0";
-
-
-struct Vertex {
-	glm::vec3 Position;
-	glm::vec3 Normal;
-	glm::vec2 TexCoords;
-};
-struct Texture{
-	GLuint id;
-	std::string type;
-};
-
-class Mesh {
-public:
-	std::vector<Vertex> vertices;
-	std::vector<GLuint> indices;
-	std::vector<Texture> textures;
-	Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures);
-	void Draw(Shader shader);
-private:
-	/*  Render data  */
-	GLuint VAO, VBO, EBO;
-	/*  Functions    */
-	void setupMesh();
-};
+const GLuint WIDTH = 1920, HEIGHT = 1080;
 
 // Function prototypes
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void stl_2_vertexs(std::vector <Vertex> &vertexs);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void Do_Movement();
 
+// Camera
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+bool keys[1024];
+GLfloat lastX = 400, lastY = 300;
+bool firstMouse = true;
+
+GLfloat deltaTime = 0.0f;
+GLfloat lastFrame = 0.0f;
 // The MAIN function, from here we start the application and run the game loop
 int main()
 {
-	std::vector <Vertex> test;
-	stl_2_vertexs(test);
 	std::cout << "Starting GLFW context, OpenGL 4.5" << std::endl;
 	// Init GLFW
 	glfwInit();
@@ -85,16 +50,14 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
-
 	// Create a GLFWwindow object that we can use for GLFW's functions
 	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "LearnOpenGL", nullptr, nullptr);
 	glfwMakeContextCurrent(window);
-
 	// Set the required callback functions
 	glfwSetKeyCallback(window, key_callback);
-
 	// Set this to true so GLEW knows to use a modern approach to retrieving function pointers and extensions
 	glewExperimental = GL_TRUE;
+	glEnable(GL_DEPTH_TEST);
 	// Initialize GLEW to setup the OpenGL Function pointers
 	glewInit();
 
@@ -104,47 +67,6 @@ int main()
 	glViewport(0, 0, width, height);
 
 	Shader shaderProgram = Shader::Shader("vertexShader.vs", "fragmentShader.frag");
-	/*    
-	// Build and compile our shader program
-	// Vertex shader
-	GLint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
-	// Check for compile time errors
-	GLint success;
-	GLchar infoLog[512];
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-	if (!success)
-	{
-		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-	// Fragment shader
-	GLint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragmentShader);
-	// Check for compile time errors
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-	if (!success)
-	{
-		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-	// Link shaders
-	GLint shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-	// Check for linking errors
-	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-	if (!success) {
-		glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-	}
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
-	*/
-
 	// Set up vertex data (and buffer(s)) and attribute pointers
 	//GLfloat vertices[] = {
 	//  // First triangle
@@ -166,7 +88,8 @@ int main()
 		0, 1, 2,3  // First Triangle
 		
 	};
-
+	std::string stl_1_path = "test.stl";
+	Mesh stl_1(stl_1_path);
 
 	GLuint VBO, VAO;
 	glGenVertexArrays(1, &VAO);
@@ -198,16 +121,19 @@ int main()
 		glfwPollEvents();
 		// Render
 		// Clear the colorbuffer
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0.2f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw our first triangle
 		shaderProgram.Use();
+		/*
 		//glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		//glDrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
+		*/
+		stl_1.Draw(shaderProgram);
 
 		// Swap the screen buffers
 		glfwSwapBuffers(window);
@@ -222,12 +148,6 @@ int main()
 	return 0;
 }
 
-// Is called whenever a key is pressed/released via GLFW
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
-{
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GL_TRUE);
-}
 
 void stl_2_vertexs(std::vector <Vertex> &vertexs) {
 
@@ -270,66 +190,56 @@ void stl_2_vertexs(std::vector <Vertex> &vertexs) {
 	stlFile.close();
 }
 
-Mesh::Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures) {
-	this->vertices = vertices;
-	this->indices = indices;
-	this->textures = textures;
 
-	this->setupMesh();
+// Moves/alters the camera positions based on user input
+void Do_Movement()
+{
+	// Camera controls
+	if (keys[GLFW_KEY_W])
+		camera.ProcessKeyboard(FORWARD, deltaTime);
+	if (keys[GLFW_KEY_S])
+		camera.ProcessKeyboard(BACKWARD, deltaTime);
+	if (keys[GLFW_KEY_A])
+		camera.ProcessKeyboard(LEFT, deltaTime);
+	if (keys[GLFW_KEY_D])
+		camera.ProcessKeyboard(RIGHT, deltaTime);
 }
-void Mesh::Draw(Shader shader) {
-	GLuint diffuseNr = 1;
-	GLuint specularNr = 1;
-	for (GLuint i = 0; i < this->textures.size(); i++)
+
+// Is called whenever a key is pressed/released via GLFW
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
+{
+	//cout << key << endl;
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+		glfwSetWindowShouldClose(window, GL_TRUE);
+	if (key >= 0 && key < 1024)
 	{
-		glActiveTexture(GL_TEXTURE0 + i); // Activate proper texture unit before binding
-										  // Retrieve texture number (the N in diffuse_textureN)
-		std::stringstream ss;
-		std::string number;
-		std::string name = this->textures[i].type;
-		if (name == "texture_diffuse")
-			ss << diffuseNr++; // Transfer GLuint to stream
-		else if (name == "texture_specular")
-			ss << specularNr++; // Transfer GLuint to stream
-		number = ss.str();
-
-		glUniform1f(glGetUniformLocation(shader.Program, ("material." + name + number).c_str()), i);
-		glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
+		if (action == GLFW_PRESS)
+			keys[key] = true;
+		else if (action == GLFW_RELEASE)
+			keys[key] = false;
 	}
-	glActiveTexture(GL_TEXTURE0);
-
-	// Draw mesh
-	glBindVertexArray(this->VAO);
-	glDrawElements(GL_TRIANGLES, this->indices.size(), GL_UNSIGNED_INT, 0);
-	glBindVertexArray(0);
 }
-void Mesh::setupMesh() {
-	glGenVertexArrays(1, &this->VAO);
-	glGenBuffers(1, &this->VBO);
-	glGenBuffers(1, &this->EBO);
 
-	glBindVertexArray(this->VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+	if (firstMouse)
+	{
+		lastX = xpos;
+		lastY = ypos;
+		firstMouse = false;
+	}
 
-	glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(Vertex),
-		&this->vertices[0], GL_STATIC_DRAW);
+	GLfloat xoffset = xpos - lastX;
+	GLfloat yoffset = lastY - ypos;  // Reversed since y-coordinates go from bottom to left
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->indices.size() * sizeof(GLuint),
-		&this->indices[0], GL_STATIC_DRAW);
+	lastX = xpos;
+	lastY = ypos;
 
-	// Vertex Positions
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-		(GLvoid*)0);
-	// Vertex Normals
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-		(GLvoid*)offsetof(Vertex, Normal));
-	// Vertex Texture Coords
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-		(GLvoid*)offsetof(Vertex, TexCoords));
+	camera.ProcessMouseMovement(xoffset, yoffset);
+}
 
-	glBindVertexArray(0);
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	camera.ProcessMouseScroll(yoffset);
 }
